@@ -6,14 +6,17 @@ const express = require('express');
 const router = express.Router();
 
 const knex = require('../knex');
+const hydrateNotes = require('../utils/hydrateNotes');
 
 // Get All (and search by query)
 /* ========== GET/READ ALL NOTES ========== */
 router.get('/notes', (req, res, next) => {
   const { searchTerm, folderId } = req.query;
-  knex.select('notes.id', 'title', 'content', 'folders.id as folder_id', 'folders.name as folderName')
+  knex.select('notes.id', 'title', 'content', 'folders.id as folder_id', 'folders.name as folderName', 'tags.id as tagId', 'tags.name as tagName')
     .from('notes')
     .leftJoin('folders', 'notes.folder_id', 'folders.id')
+    .leftJoin('notes_tags', 'notes.id', 'notes_tags.note_id')
+    .leftJoin('tags', 'tags.id', 'notes_tags.tag_id')
     .modify(function (queryBuilder) {
       if (searchTerm) {
         queryBuilder.where('title', 'like', `%${searchTerm}%`);
@@ -25,9 +28,14 @@ router.get('/notes', (req, res, next) => {
       }
     })
     .orderBy('notes.id')
-    .then(results => {
-      res.json(results);
-    })
+    .then(result => {
+      if (result) {
+        const hydrated = hydrateNotes(result);
+        res.json(hydrated);
+      } else {
+        next();
+      }
+    })  
     .catch(err => next(err));
 });
 
@@ -124,16 +132,11 @@ router.post('/notes', (req, res, next) => {
 router.delete('/notes/:id', (req, res, next) => {
   const id = req.params.id;
   
-  knex.select('id', 'title', 'content')
+  knex.del()
     .from('notes')
     .where('id', id)
-    .del()
-    .then(count => {
-      if (count) {
-        res.status(204).end();
-      } else {
-        next();
-      }
+    .then(() => {
+      res.status(204).end();
     })
     .catch(err => next(err));
 });
