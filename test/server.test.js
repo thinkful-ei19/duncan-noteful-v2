@@ -107,17 +107,22 @@ describe('Noteful API', function () {
         });
     });
 
-    it('should return a list with the correct right fields', function () {
-      return chai.request(app)
-        .get('/api/notes')
+    it('should return a list with the correct fields', function () {
+      let count;
+      return knex.count()
+        .from('notes')
+        .then(([result]) => {
+          count = Number(result.count);
+          return chai.request(app).get('/api/notes');
+        })
         .then(function (res) {
           expect(res).to.have.status(200);
           expect(res).to.be.json;
           expect(res.body).to.be.a('array');
-          expect(res.body).to.have.length(10);
+          expect(res.body).to.have.length(count);
           res.body.forEach(function (item) {
             expect(item).to.be.a('object');
-            expect(item).to.include.keys('id', 'title', 'content');
+            expect(item).to.include.keys('id', 'title', 'content', 'folder_id', 'folderName', 'tags');
           });
         });
     });
@@ -163,13 +168,20 @@ describe('Noteful API', function () {
 
 
     it('should return an empty array for an incorrect query', function () {
+      let res;
       return chai.request(app)
         .get('/api/notes?searchTerm=Not%20a%20Valid%20Search')
-        .then(function (res) {
+        .then(function (_res) {
+          res = _res;
           expect(res).to.have.status(200);
           expect(res).to.be.json;
           expect(res.body).to.be.a('array');
           expect(res.body).to.have.length(0);
+          return knex.select().from('notes').where('title', 'like', '%Not a Valid Search%');
+        })
+        .then(data => {
+          expect(res.body[0]).to.equal(data[0]);
+          expect(res.body.length).to.equal(data.length);
         });
     });
 
@@ -178,15 +190,36 @@ describe('Noteful API', function () {
   describe('GET /api/notes/:id', function () {
 
     it('should return correct notes', function () {
-      return chai.request(app)
-        .get('/api/notes/1000')
-        .then(function (res) {
+    //   first implementation, works but want to use promise all method
+    //   let res;
+    //   return chai.request(app)
+    //     .get('/api/notes/1000')
+    //     .then(function (_res) {
+    //       res = _res;
+    //       expect(res).to.have.status(200);
+    //       expect(res).to.be.json;
+    //       expect(res.body).to.be.an('object');
+    //       expect(res.body).to.include.keys('id', 'title', 'content');
+    //       expect(res.body.id).to.equal(1000);
+    //       expect(res.body.title).to.equal('5 life lessons learned from cats');
+    //       return knex.select().from('notes').where('id', 1000);
+    //     })
+    //     .then(([data]) => {
+    //       expect(res.body.id).to.equal(data.id);
+    //     });
+      const dataPromise = knex.select()
+        .from('notes')
+        .where('id', 1000);
+
+      const apiPromise = chai.request(app)
+        .get('/api/notes/1000');
+
+      return Promise.all([dataPromise, apiPromise])
+        .then(function ([data, res]) {
           expect(res).to.have.status(200);
           expect(res).to.be.json;
-          expect(res.body).to.be.an('object');
-          expect(res.body).to.include.keys('id', 'title', 'content');
-          expect(res.body.id).to.equal(1000);
-          expect(res.body.title).to.equal('5 life lessons learned from cats');
+          expect(res.body).to.be.a('object');
+          expect(res.body.id).to.equal(data[0].id);
         });
     });
   });
@@ -222,16 +255,28 @@ describe('Noteful API', function () {
       const newItem = {
         'foo': 'bar'
       };
-      return chai.request(app)
-        .post('/api/notes')
-        .send(newItem)
-        .catch(err => err.response)
+      let notesLength;
+      return knex.select().from('notes')
+        .then(res => {
+          notesLength = res.length;
+          return chai.request(app)
+            .post('/api/notes')
+            .send(newItem)
+            .catch(err => err.response);
+        })
         .then(res => {
           expect(res).to.have.status(400);
           expect(res).to.be.json;
           expect(res.body).to.be.a('object');
           expect(res.body.message).to.equal('Missing `title` in request body');
-        });
+          return knex.select().from('notes');
+        })
+        .then(data => {
+          expect(notesLength).to.equal(data.length);
+        }); 
+        
+        
+       
     });
 
   });
@@ -256,6 +301,11 @@ describe('Noteful API', function () {
           expect(res.body.id).to.equal(1005);
           expect(res.body.title).to.equal(updateItem.title);
           expect(res.body.content).to.equal(updateItem.content);
+          return knex.select().from('notes').where('id', 1005);
+        })
+        .then(([data]) => {
+          expect(updateItem.title).to.equal(data.title);
+          expect(updateItem.content).to.equal(data.content);
         });
     });
 
@@ -263,15 +313,25 @@ describe('Noteful API', function () {
       const updateItem = {
         'foo': 'bar'
       };
-      return chai.request(app)
-        .put('/api/notes/9999')
-        .send(updateItem)
-        .catch(err => err.response)
+      let originalNote;
+      return knex.select().from('notes').where('id',1006)
+        .then(res => {
+          [originalNote] = res;
+          return chai.request(app)
+            .put('/api/notes/1006')
+            .send(updateItem)
+            .catch(err => err.response);
+        })
         .then(res => {
           expect(res).to.have.status(400);
           expect(res).to.be.json;
           expect(res.body).to.be.a('object');
           expect(res.body.message).to.equal('Missing `title` in request body');
+          return knex.select().from('notes').where('id',1006);
+        })
+        .then(data => {
+          expect(data[0].title).to.equal(originalNote.title);
+          expect(data[0].content).to.equal(originalNote.content);
         });
     });
 
@@ -284,6 +344,10 @@ describe('Noteful API', function () {
         .delete('/api/notes/1005')
         .then(function (res) {
           expect(res).to.have.status(204);
+          return knex.select().from('notes').where('id', 1005);
+        })
+        .then(data => {
+          expect(data.length).to.equal(0);
         });
     });
     
