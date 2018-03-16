@@ -85,16 +85,9 @@ router.put('/notes/:id', (req, res, next) => {
   }
   const {tags} = req.body; 
 
-  knex.select('notes.id', 'title', 'content', 'folders.id as folder_id', 'folders.name as folderName')
-    .from('notes')
-    .leftJoin('folders', 'notes.folder_id', 'folders.id')
-    .where('id', noteId)
-    .returning(['id', 'title', 'content', 'folder_id'])
-    .update(updateObj)
+  knex('notes').update(updateObj).where('id', noteId)
     .then(()=> {
-      return knex.del()
-        .from('notes_tags')
-        .where('note_id', noteId);
+      return knex.del().from('notes_tags').where('note_id', noteId);
     })
     .then(()=> {
       const tagsInsert = tags.map(tagId => ({ note_id: noteId, tag_id: tagId }));
@@ -116,7 +109,7 @@ router.put('/notes/:id', (req, res, next) => {
         // Hydrate the results
         const [hydrated] = hydrateNotes(result);
         // Respond with a location header, a 201 status and a note object
-        res.location(`${req.originalUrl}/${hydrated.id}`).status(201).json(hydrated);
+        res.json(hydrated);
       } else {
         next();
       }
