@@ -155,7 +155,6 @@ const noteful = (function () {
         folder_id: editForm.find('.js-note-folder-entry').val(),
         tags: editForm.find('.js-note-tags-entry').val()
       };
-
       if (store.currentNote.id) {
         api.update(`/api/notes/${noteObj.id}`, noteObj)
           .then(updateResponse => {
