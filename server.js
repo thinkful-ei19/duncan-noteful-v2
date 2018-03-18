@@ -9,7 +9,7 @@ const notesRouterV2 = require('./routes/notes.router');
 const foldersRouter = require('./routes/folders.router');
 const tagsRouter = require('./routes/tags.router');
 
-// Create an Express application
+// Create an Express applicati
 const app = express();
 
 // Log all requests. Skip logging during
